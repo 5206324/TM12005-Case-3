@@ -50,24 +50,31 @@ ecg, fs, t = read_ecg_mat(path, plotresult=True)
 # %% Pan TOMKINS
 #%% PAN TOMKINS 
 
-# Stap 1: bandpass filter
-b,a = signal.butter(2, [5, 15], btype="band", fs=fs)
-band_passed = signal.filtfilt(b, a, ecg)
 
-# Stap 2: derivative filter
-T = 1 / fs          # Bereken de tijd per sample in seconden
-a = 8 * T           # Gebruik T in plaats van de timestamp t[1]
-b = [-1, -2, 0, 2, 1]
-deriv_filtered = signal.lfilter(b, a, band_passed)
+# Pan Tomkins datasetje bouwen
+def ecg_PT(ecg, fs,t):
+    # Stap 1: bandpass filter
+    b,a = signal.butter(2, [5, 15], btype="band", fs=fs)
+    band_passed = signal.filtfilt(b, a, ecg)
 
-# Stap 3: squaring
-squared = deriv_filtered**2
+    # Stap 2: derivative filter
+    T = 1 / fs          # Bereken de tijd per sample in seconden
+    a = 8 * T           # Gebruik T in plaats van de timestamp t[1]
+    b = [-1, -2, 0, 2, 1]
+    deriv_filtered = signal.lfilter(b, a, band_passed)
 
-# Stap 4: moving average integration
-N = 30
-a = 1
-b = np.ones(N)/N
-ecgmai = signal.lfilter(b, a, squared)
+    # Stap 3: squaring
+    squared = deriv_filtered**2
+
+    # Stap 4: moving average integration
+
+    N = 30
+    a = 1
+    b = np.ones(N)/N
+    ecgmai = signal.lfilter(b, a, squared)
+    
+    return ecgmai, fs, t
+
 
 # peak detection
 locs, prop = signal.find_peaks(ecgmai, height=1e6, distance=int(.3*fs))
@@ -77,6 +84,7 @@ locs, prop = signal.find_peaks(ecgmai, height=1e6, distance=int(.3*fs))
 RR_intervals_sec = np.diff(locs) / fs
 mean_RR_interval = np.mean(RR_intervals_sec)
 mean_heartrate = 60 / mean_RR_interval
+
 
 
 #%%
