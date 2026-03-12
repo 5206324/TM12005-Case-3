@@ -13,7 +13,7 @@ import pandas as pd
 
 #%% Path, leads and def read_ecg_mat 
 leads = ['I','II','III','AVR','AVL','AVF','V1','V2','V3','V4','V5','V6']
-path = r"/Users/fenne/Documents/Technical Medicine/TM12005 Advanced Signal Processing/Case 3/TM12005-Case-3/TM12005 Advanced Signal Processing (202526 Q3) - 322026 - 159 PM 2/004_Groenewoud_PACs.mat"
+path = r"C:\Users\vmoba\OneDrive\Bureaublad\Kt\Ms1\TM12005\EMC opdrachten\E2\004_Groenewoud_PACs.mat"
 
 
 def read_ecg_mat(path, plotresult=True):
@@ -73,9 +73,10 @@ def ecg_PT(ecg, fs,t):
     b = np.ones(N)/N
     ecgmai = signal.lfilter(b, a, squared)
     
-    return ecgmai, fs, t
+    return ecgmai, band_passed, deriv_filtered, squared, fs, t
 
-
+#%%
+ecgmai, band_passed, deriv_filtered, squared, fs, t = ecg_PT(ecg, fs, t)
 # peak detection
 locs, prop = signal.find_peaks(ecgmai, height=1e6, distance=int(.3*fs))
 
@@ -136,4 +137,4 @@ plt.tight_layout()
 plt.show()
 
 
-# %%
+    # %%
