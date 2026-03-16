@@ -9,7 +9,7 @@ from scipy import signal
 import datetime
 import matplotlib.dates as mdates
 import pandas as pd
-from data_loader import laad_ecg_bestand #in dit bestand staat een functie die automatisch de data map vindt en het bestand inlaadt, je hoeft alleen de naam van het bestand aan te passen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
+from Stap1_data_loader import laad_ecg_bestand #in dit bestand staat een functie die automatisch de data map vindt en het bestand inlaadt, je hoeft alleen de naam van het bestand aan te passen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
 
 # %%
 #hier kan je de naam van het bestand aanpassen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
