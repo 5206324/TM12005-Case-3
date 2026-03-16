@@ -1,5 +1,5 @@
 # Dit is het bestand: data_loader.py
-
+#%%
 import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
