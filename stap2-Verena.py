@@ -1,5 +1,6 @@
-#%%Voor de detectie van AF ben je benieuwd of het
-#entriculaire ritme regulair is. Je besluit daarom om de ventriculaire activiteit te detecteren en de frequentie te bepalen. Zorg ervoor dat je script de ventriculaire activiteit kan detecteren en bepaal de frequentie.
+#%%
+# Voor de detectie van AF ben je benieuwd of het
+#ventriculaire ritme regulair is. Je besluit daarom om de ventriculaire activiteit te detecteren en de frequentie te bepalen. Zorg ervoor dat je script de ventriculaire activiteit kan detecteren en bepaal de frequentie.
 #Laat zien hoe de frequentie verandert gedurende de opnames. Zijn er momenten met een hoge of lage hartslag?
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,47 +9,14 @@ from scipy import signal
 import datetime
 import matplotlib.dates as mdates
 import pandas as pd
+from pathlib import Path
+from data_loader import laad_ecg_bestand #in dit bestand staat een functie die automatisch de data map vindt en het bestand inlaadt, je hoeft alleen de naam van het bestand aan te passen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
 
-
-#%% Path, leads and def read_ecg_mat 
-leads = ['I','II','III','AVR','AVL','AVF','V1','V2','V3','V4','V5','V6']
-path = r"C:\Users\vmoba\OneDrive\Bureaublad\Kt\Ms1\TM12005\EMC opdrachten\TM12005-Case-3\TM12005 Advanced Signal Processing (202526 Q3) - 322026 - 159 PM 2\004_Groenewoud_PACs+PVCs.mat"
-
-
-def read_ecg_mat(path, plotresult=True):
-    # open datafile
-    data = loadmat(path, squeeze_me=True, struct_as_record=False)
-    ecg = data['ecg'].sig[:,leads.index('II')]
-
-    fs = data['ecg'].header.Sampling_Rate
-    t0 = datetime.datetime(*data['ecg'].start_vec)
-
-    nSamples = data['ecg'].sig.shape[0]
-    t = pd.date_range(
-        start=t0,
-        periods=nSamples,
-        freq=pd.Timedelta(seconds=1/fs)
-    )
-        
-    # Plot signal in time domain
-    if plotresult:
-        fig, ax = plt.subplots(figsize=(9, 3))
-        ax.plot(t, ecg)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("ECG (mV)")
-        ax.set_title("Raw ECG Signal")
-        plt.show()
-    
-    return ecg, fs, t
 # %%
-ecg, fs, t = read_ecg_mat(path, plotresult=True)
+#hier kan je de naam van het bestand aanpassen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
+ecg, fs, t = laad_ecg_bestand("004_Groenewoud_PACs+PVCs.mat", plotresult=True)
 
-
-# %% Pan TOMKINS
 #%% PAN TOMKINS 
-
-
 # Pan Tomkins datasetje bouwen
 def ecg_PT(ecg, fs,t):
     # Stap 1: bandpass filter
