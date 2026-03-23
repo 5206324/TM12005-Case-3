@@ -36,11 +36,11 @@ def ecg_PT_both(ecg, fs):
     squared = deriv_filtered**2
     N = int(0.150 * fs)
     ecgmai = signal.lfilter(np.ones(N)/N, 1, squared)
-    return ecgmai
+    return ecgmai, squared, band_passed, deriv_filtered
 #%%
 # --- EXECUTION ---
 # ecg_raw, fs, t_raw = read_ecg_both(path_both)
-ecgmai = ecg_PT_both(ecg, fs)
+ecgmai, squared, band_passed, deriv_filtered = ecg_PT_both(ecg, fs)
 
 # Peak detection (Ventriculaire activiteit)
 locs, _ = signal.find_peaks(ecgmai, height=1e6, distance=int(0.3*fs))
