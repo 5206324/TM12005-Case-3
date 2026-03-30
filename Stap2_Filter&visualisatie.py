@@ -1,7 +1,6 @@
-#%%
-# Voor de detectie van AF ben je benieuwd of het
-#ventriculaire ritme regulair is. Je besluit daarom om de ventriculaire activiteit te detecteren en de frequentie te bepalen. Zorg ervoor dat je script de ventriculaire activiteit kan detecteren en bepaal de frequentie.
-#Laat zien hoe de frequentie verandert gedurende de opnames. Zijn er momenten met een hoge of lage hartslag?
+#%% === Stap 2: filteren en visualisatie === 
+# --- Data % pakketen inladen ---
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
@@ -10,14 +9,11 @@ import datetime
 import matplotlib.dates as mdates
 import pandas as pd
 from pathlib import Path
-from Stap1_data_loader import laad_ecg_bestand #in dit bestand staat een functie die automatisch de data map vindt en het bestand inlaadt, je hoeft alleen de naam van het bestand aan te passen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
+from Stap1_data_loader import laad_ecg_bestand 
 
-# %%
-#hier kan je de naam van het bestand aanpassen als je een ander bestand wilt inladen (dus het bestand met alleen de PACs bv)
 ecg, fs, t = laad_ecg_bestand("004_Groenewoud_PACs+PVCs.mat", plotresult=True)
 
-#%% PAN TOMKINS 
-# Pan Tomkins datasetje bouwen
+#%% --- PAN TOMKINS --- 
 def ecg_PT(ecg, fs,t):
     # Stap 1: bandpass filter
     b,a = signal.butter(2, [5, 15], btype="band", fs=fs)
@@ -33,7 +29,6 @@ def ecg_PT(ecg, fs,t):
     squared = deriv_filtered**2
 
     # Stap 4: moving average integration
-
     N = 30
     a = 1
     b = np.ones(N)/N
@@ -41,30 +36,17 @@ def ecg_PT(ecg, fs,t):
     
     return ecgmai, band_passed, deriv_filtered, squared, fs, t
 
-#%%
 ecgmai, band_passed, deriv_filtered, squared, fs, t = ecg_PT(ecg, fs, t)
 # peak detection
 locs, prop = signal.find_peaks(ecgmai, height=1e6, distance=int(.3*fs))
-
 
 # rr intervals
 RR_intervals_sec = np.diff(locs) / fs
 mean_RR_interval = np.mean(RR_intervals_sec)
 mean_heartrate = 60 / mean_RR_interval
 
-
-
-#%%
-print(t)
-#%%
-
-# plot results
-# --- PLOT RESULTS ---
-# Define how many samples to plot to avoid MemoryError.
-# 200 Hz * 10 seconds = 2000 samples
-lim = 3000
-
-# Slice the time array and find which peaks belong in this 10-second window
+#%% --- PLOT RESULTS PAN TOMKINS---
+lim = 3000                          #x-as limitatie om het leesbaar te houden
 t_plot = t[:lim]
 locs_plot = locs[locs < lim]
 
@@ -91,7 +73,7 @@ ax[3].set_title("Squaring function")
 ax[3].set_xlim(t_plot[0], t_plot[-1])
 
 ax[4].plot(t_plot, ecgmai[:lim])
-ax[4].plot(t_plot[locs_plot], ecgmai[locs_plot], 'r*') # Plot red stars on peaks
+ax[4].plot(t_plot[locs_plot], ecgmai[locs_plot], 'r*') 
 ax[4].text(t_plot[-1], np.max(ecgmai[:lim])*0.8, f'mean RR = {mean_RR_interval:.3f} s', ha='right')
 ax[4].text(t_plot[-1], np.max(ecgmai[:lim])*0.5, f'HR = {mean_heartrate:.1f} bpm', ha='right')
 ax[4].set_xlabel("Time")
@@ -102,84 +84,77 @@ ax[4].set_xlim(t_plot[0], t_plot[-1])
 plt.tight_layout()
 plt.show()
 
-#%%
-#%% Analyse van Ventriculaire Activiteit en Frequentie (Inclusief opschoning)
+#%% --- Analyse van Ventriculaire Activiteit en Frequentie ---
 
-# 1. Zoek het enorme gat in de meting om de data te splitsen
+# 1. Gat in meting vinden en verwijderen
 rr_ruw = np.diff(locs) / fs
-gap_index = np.argmax(rr_ruw) # De index met het allergrootste RR-interval
-
-# Splits de pieken in vóór het gat en ná het gat
+gap_index = np.argmax(rr_ruw)           # De index met het allergrootste RR-interval
 locs_deel_1 = locs[:gap_index + 1]
 locs_deel_2 = locs[gap_index + 1:]
 
-print(f"Dataset gesplitst vanwege groot gat in de meting.")
 print(f"- Deel 1 (voor pauze): {len(locs_deel_1)} slagen")
 print(f"- Deel 2 (na pauze): {len(locs_deel_2)} slagen")
 
-# We gebruiken Deel 1 voor de analyse (pas dit gerust aan naar Deel 2 als je die wilt bekijken)
-locs_analyse = locs_deel_1
+locs_analyse = locs_deel_1              # Deel 1 zo gebruiken voor de analyse 
 locs_analyse2 = locs_deel_2
 
-# 2. Bereken de RR-intervallen en de Hartslag (BPM) voor de analyse-set
+# 2. RR-intervallen en de Hartslag (BPM) berekenen voor beide analyses
 rr_intervallen = np.diff(locs_analyse) / fs
-t_slagen = t[locs_analyse[1:]] # Haal de echte tijdstippen (timestamps) op
+t_slagen = t[locs_analyse[1:]] 
 hartslag_bpm = 60 / rr_intervallen
 
 rr_intervallen2 = np.diff(locs_analyse2) / fs
-t_slagen2 = t[locs_analyse2[1:]] # Haal de echte tijdstippen (timestamps) op
+t_slagen2 = t[locs_analyse2[1:]] 
 hartslag_bpm2 = 60 / rr_intervallen2
 
 # --- PLOT 1: Hartslag (Frequentie) over tijd ---
-# Dit beantwoordt je opdracht: "Laat zien hoe de frequentie verandert gedurende de opnames"
-# Maak een 2x2 grid aan. 
-# Tip: Maak de figsize wat hoger (bijv 14, 10) zodat de 4 grafieken niet op elkaar gepropt zitten.
 fig, ax = plt.subplots(2, 2, figsize=(14, 10))
 
-# --- PLAATJE 1: Linksboven (ax[0, 0]) - Jouw Hartslag frequentie ---
+# --- fig 1: Hartslag freq ---
 ax[0, 0].plot(t_slagen, hartslag_bpm, marker='.', linestyle='', color='b', markersize=2)
 ax[0, 0].axhline(y=np.median(hartslag_bpm), color='g', linestyle='--', label=f'Mediaan: {np.median(hartslag_bpm):.1f} BPM')
-
 ax[0, 0].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-ax[0, 0].set_title("1. Ventriculaire Frequentie over Tijd")
+ax[0, 0].set_title("1. Ventriculaire Frequentie over Tijd- voor gat")
 ax[0, 0].set_xlabel("Tijd")
 ax[0, 0].set_ylabel("Hartslag (BPM)")
 ax[0, 0].set_ylim(40, 180)
 ax[0, 0].legend()
 ax[0, 0].grid(True)
 
-
-# --- PLAATJE 2: Rechtsboven (ax[0, 1]) - Bijv. het Tachogram ---
-# Hier kun je mooi je RR-intervallen plotten
-ax[0, 1].plot(rr_intervallen, marker='.', linestyle='', color='purple', markersize=2)
-ax[0, 1].axhline(y=np.median(rr_intervallen), color='g', linestyle='--')
-ax[0, 1].set_title("2. Tachogram: Variatie in RR")
+# --- fig 2: Tachogram ---
+ax[0, 1].plot(t_slagen, rr_intervallen, marker='.', linestyle='', color='purple', markersize=2, label='RR-intervallen')
+ax[0, 1].axhline(y=np.median(rr_intervallen), color='g', linestyle='--', label=f'Mediaan: {np.median(rr_intervallen):.3f}s')
+ax[0, 1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M')) # Formatteer als tijd
+ax[0, 1].set_title("2. Tachogram: Variatie in RR - voor gat")
 ax[0, 1].set_xlabel("Slag nummer")
 ax[0, 1].set_ylabel("RR-interval (seconden)")
+ax[0, 1].legend(loc='upper right', fontsize='small')
 ax[0, 1].grid(True)
 
-
-# --- PLAATJE 3: Linksonder (ax[1, 0]) - Bijv. Poincaré of AF detectie ---
-# ax[1, 0].plot(...) 
-ax[1, 0].set_title("3. deel 2")
+# --- fig 3: Hartslag na het gat ---
+ax[1, 0].set_title("3. Ventriculaire Frequentie over Tijd - na gat")
 ax[1, 0].plot(t_slagen2, hartslag_bpm2, marker='.', linestyle='', color='b', markersize=2)
 ax[1, 0].axhline(y=np.median(hartslag_bpm2), color='g', linestyle='--', label=f'Mediaan: {np.median(hartslag_bpm2):.1f} BPM')
-
+ax[1, 0].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M')) # Tijdformaat toevoegen
+ax[1, 0].set_xlabel("Tijd")
+ax[1, 0].set_ylabel("Hartslag (BPM)")
+ax[1, 0].set_ylim(40, 180)
 ax[1, 0].grid(True)
+ax[1, 0].legend()
 
+# --- fig 4: Tachogram na het gat ---
+ax[1, 1].plot(t_slagen2, rr_intervallen2, marker='.', linestyle='', color='purple', markersize=2, label='RR-intervallen')
+ax[1, 1].axhline(y=np.median(rr_intervallen2), color='g', linestyle='--', label=f'Mediaan: {np.median(rr_intervallen2):.3f}s')
+ax[1, 1].xaxis.set_major_formatter(mdates.DateFormatter('%H:%M')) # Formatteer als tijd
+ax[1, 1].set_title("4. Tachogram: Variatie in RR - na gat")
+ax[1, 1].set_xlabel("Slag nummer")
+ax[1, 1].set_ylabel("RR-interval (seconden)")
+ax[1, 1].legend(loc='upper right', fontsize='small')
+ax[1, 1].grid(True)
 
-# --- PLAATJE 4: Rechtsonder (ax[1, 1]) - Bijv. Ruw ECG met PAC/PVC stippen ---
-# ax[1, 1].plot(...)
-ax[0, 1].plot(rr_intervallen, marker='.', linestyle='', color='purple', markersize=2)
-ax[0, 1].axhline(y=np.median(rr_intervallen), color='g', linestyle='--')
-ax[0, 1].set_title("2. Tachogram: Variatie in RR")
-ax[0, 1].set_xlabel("Slag nummer")
-ax[0, 1].set_ylabel("RR-interval (seconden)")
-ax[0, 1].grid(True)
-
-
-# Zorgt ervoor dat de titels en as-labels niet over elkaar heen vallen
 plt.tight_layout() 
+plt.show()
 
-# Toon het hele dashboard
+
+
 # %%

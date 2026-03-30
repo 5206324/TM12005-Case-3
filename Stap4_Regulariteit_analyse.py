@@ -1,4 +1,4 @@
-#%% Inladen data 
+#%% === Inladen data ===
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -21,7 +21,26 @@ rmssd_trend = bereken_rolling_rmssd(clean_rr, window_size=window_n)
 x_index = np.arange(len(rmssd_trend))
 
 # De bijbehorende tijdstippen voor de labels
-t_labels = clean_t[window_n:]
+t_trend = clean_t[window_n:]
+t_labels = t_trend
+#%%
+def analyseer_episodes(status_lijst):
+    pacs = 0
+    af_runs = 0
+    in_af_run = False
+    
+    # We tellen hoe vaak de status verspringt
+    for s in status_lijst:
+        if s == 1: # Losse PAC
+            pacs += 1
+        elif s == 2: # AF
+            if not in_af_run:
+                af_runs += 1
+                in_af_run = True
+        else: # Normaal
+            in_af_run = False
+            
+    return pacs, af_runs
 
 #%% --- PLOTTING RMS---
 fig, ax = plt.subplots(figsize=(12, 6))
@@ -144,6 +163,26 @@ for i in range(len(segment_rmssd)):
     else:
         status.append(0) # Normaal
 
+# --- STATUS SMOOTHING  ---
+status_clean = np.array(status).copy() # We maken een kopie om mee te werken
+window_smooth = 3 
+
+for i in range(window_smooth, len(status_clean) - window_smooth):
+    # Als de huidige slag GEEN AF (2) is...
+    if status_clean[i] != 2:
+        # Kijk naar de buren (bijv. 5 slagen ervoor en 5 erna)
+        omgeving = status_clean[i - window_smooth : i + window_smooth]
+        
+        # Tel hoe vaak AF (2) voorkomt in die omgeving
+        aantal_af = np.sum(omgeving == 2)
+        
+        # Als meer dan de helft van de buren AF is, vul dan het gat op
+        if aantal_af > window_smooth: # Bij window 5 kijken we naar 10 buren
+            status_clean[i] = 2
+
+# BELANGRIJK: Overschrijf je oude status met de schone versie voor het plotten
+status = status_clean.tolist()
+
 # --- PLOTTEN MET 3 KLEUREN ---
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
 
@@ -204,4 +243,90 @@ plt.grid(alpha=0.2)
 plt.show()
 
 print(f"SDRR van dit segment: {sdrr_30min:.3f} s")
+# %%
+# --- ANALYSE PER UUR ---
+# We maken een lijstje van alle unieke uren in de dataset
+unieke_uren = pd.Series(clean_t).dt.hour.unique()
+
+print(f"{'Uur':<10} | {'PACs (<3)':<12} | {'AF-Runs (>=3)':<15} | {'AF-Burden (%)':<12}")
+print("-" * 55)
+
+voor_tabel = []
+
+for uur in unieke_uren:
+    mask_uur = (clean_t.hour == uur)
+    uur_rmssd = rmssd_trend[(t_labels.hour == uur)]
+    uur_status = []
+
+    for i in range(len(uur_rmssd)):
+        if uur_rmssd[i] > berekende_drempel:
+            start = max(0, i-15)
+            end = min(len(uur_rmssd), i+15)
+            if np.mean(uur_rmssd[start:end] > berekende_drempel) > 0.7:
+                uur_status.append(2) # AF
+            else:
+                uur_status.append(1) # PAC
+        else:
+            uur_status.append(0)
+    # --- SMOOTHING STAP  ---
+    uur_status = np.array(uur_status) # Even omzetten naar array voor berekening
+    ws = 5 
+    for i in range(ws, len(uur_status) - ws):
+        if uur_status[i] != 2:
+            # Als meer dan de helft van de buren AF (2) is, maak deze ook AF
+            if np.sum(uur_status[i-ws : i+ws] == 2) > ws:
+                uur_status[i] = 2
+
+    # --- Tel de episodes ---
+    pacs, af_runs = analyseer_episodes(uur_status)
+    
+    # --- Bereken burden ---
+    burden = (sum(1 for s in uur_status if s == 2) / len(uur_status) * 100) if len(uur_status) > 0 else 0
+    
+    print(f"{uur:02d}:00 uur  | {pacs:<12} | {af_runs:<15} | {burden:<12.1f}%")
+    voor_tabel.append([uur, pacs, af_runs, burden])
+
+# --- BEREKEN TOTALEN ---
+totaal_pacs = sum(rij[1] for rij in voor_tabel)
+totaal_af_runs = sum(rij[2] for rij in voor_tabel)
+
+# Totale burden over de gehele opname berekenen
+totaal_slagen_af = sum( (rij[3]/100) * (len(rmssd_trend[t_labels.hour == rij[0]])) for rij in voor_tabel )
+totaal_slagen_gemeten = len(rmssd_trend)
+totaal_burden_procent = (totaal_slagen_af / totaal_slagen_gemeten) * 100 if totaal_slagen_gemeten > 0 else 0
+
+# --- PRINT DE TOTAALREGEL ---
+print("-" * 55)
+print(f"{'TOTAAL':<10} | {totaal_pacs:<12} | {totaal_af_runs:<15} | {totaal_burden_procent:<12.1f}%")
+print("-" * 55)
+
+# --- BONUS: OPSLAAN ALS CSV (voor Excel) ---
+# df_resultaten = pd.DataFrame(voor_tabel, columns=['Uur', 'PACs', 'AF_Runs', 'Burden_Procent'])
+# df_resultaten.to_csv("analyse_resultaten.csv", index=False)
+# %%
+#%% --- PLOTTING RMS---
+fig, ax = plt.subplots(figsize=(12, 6))
+
+# Plot tegen de index, niet tegen de tijdwaarde
+ax.plot(x_index, rmssd_trend, color='firebrick', linewidth=0.8, label='RMSSD (Onregelmatigheid)')
+
+# Referentielijn
+ax.axhline(y=berekende_drempel, color='black', linestyle='--', alpha=0.6, label='Drempelwaarde AF')
+
+# Nu "faken" we de x-as labels:
+# We kiezen bv. 10 plekken op de as om een tijdstip te laten zien
+num_ticks = 10
+tick_indices = np.linspace(0, len(x_index) - 1, num_ticks, dtype=int)
+ax.set_xticks(tick_indices)
+ax.set_xticklabels([t_labels[i].strftime('%H:%M:%S') for i in tick_indices], rotation=45)
+
+ax.set_title("Ventriculaire Onregelmatigheid (Tijd-gap verwijderd)")
+ax.set_ylabel("RMSSD (seconden)")
+ax.set_xlabel("Tijdstip (gecomprimeerde as)")
+ax.set_ylim(0, 0.4)
+ax.legend()
+ax.grid(True, alpha=0.2)
+
+plt.tight_layout()
+plt.show()
 # %%
