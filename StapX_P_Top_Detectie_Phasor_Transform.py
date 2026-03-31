@@ -1,5 +1,6 @@
 
-#%%import numpy as np
+#%%
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import signal
@@ -27,8 +28,8 @@ start_samp = int(zoom_start_sec * fs)
 end_samp = int(zoom_end_sec * fs)
 
 # Pak de data en centreer deze (essentieel voor Phasor Transform)
-ecg_seg = ecg_raw[start_samp:end_samp]
-ecg_seg_clean = ecg_seg - np.median(ecg_seg)
+ecg_seg = ecg_raw[start_samp:end_samp]#We nemen een segment van 12 seconden, beginnend bij 150 seconden. Dit is een periode waarin we mogelijk interessante atriale activiteit kunnen zien.
+ecg_seg_clean = ecg_seg - np.median(ecg_seg) #Dit haalt de "baseline wander" (het langzaam op en neer bewegen van de lijn) weg door het signaal rond de nul-lijn te leggen.
 t_seg = np.linspace(zoom_start_sec, zoom_end_sec, len(ecg_seg_clean))
 
 # --- 3. DETECTIE LOOP ---
@@ -44,16 +45,24 @@ pr_ms_seg = []
 # Dynamische Phasor gevoeligheid (Rv) gebaseerd op de lokale variatie
 Rv_p = np.std(ecg_seg_clean) * 0.1 
 
+# Eerst worden de QRS complexen geidentificeerd met Pan-Tompkins, en de exacte locatie van de R top verfijnd door in een window van 60 seconde precies te kijken waar de top het hoogst is. 
+# Daarna komt de P-top Detectie via Phasor Transform. 
+# De P-top is vaak klein en lastig te vinden. # Zoekvenster: De code zoekt specifiek in het gebied 100ms tot 250ms vóór de R-top. Dit is fysiologisch gezien de plek waar de P-top hoort te zitten.
+# Phasor Transform: Met np.arctan(p_zone / 10.0) wordt het signaal omgezet naar een fase-hoek. Dit proces vlakt de amplitude-verschillen af, waardoor een kleine P-top relatief "groter" en duidelijker zichtbaar wordt ten opzichte van de ruis.
+# Smoothing: Er wordt een klein gemiddelde (convolve) toegepast om te voorkomen dat een eenzame ruis-spike als P-top wordt gezien.
+
 for loc in seg_locs:
     # 1. VERFIJN R-TOP (De allergrootste uitslag)
-    win = int(0.06 * fs)
-    s, e = max(0, loc-win), min(len(ecg_seg_clean), loc+win)
+    # win = int(0.06 * fs)
+    # s, e = max(0, loc-win), min(len(ecg_seg_clean), loc+win)
     
-    # We zoeken de index van de grootste absolute waarde
-    # Dit zorgt dat de ster ALTIJD op de scherpste piek komt
-    abs_fragment = np.abs(ecg_seg_clean[s:e])
-    r_idx = s + np.argmax(abs_fragment)
+    # # # We zoeken de index van de grootste absolute waarde
+    # # # Dit zorgt dat de ster ALTIJD op de scherpste piek komt
+    # abs_fragment = np.abs(ecg_seg_clean[s:e])
+    # r_idx = s + np.argmax(abs_fragment)
     
+    r_idx = loc # Voor deze dataset lijkt de Pan-Tompkins detectie al heel goed, dus we kunnen direct de loc gebruiken als R-top index.
+
     # 2. DEFINIEER HET P-VENSTER (Vrij streng)
     # Zoek tussen 250ms en 100ms vóór de R-top
     p_s = max(0, r_idx - int(0.250 * fs))
@@ -80,6 +89,19 @@ for loc in seg_locs:
         pr_ms_seg.append(((r_idx - p_idx) / fs) * 1000)
 # --- 4. VISUALISATIE ---
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
+
+
+# De code genereert twee grafieken:
+
+# Bovenste grafiek: Toont het ECG met groene bolletjes (P-toppen) en rode sterren (R-toppen). Je kunt hier visueel controleren of de computer de juiste bultjes heeft gepakt.
+
+# Onderste grafiek: Toont de trend van het PR-interval.
+
+# Ligt de lijn boven de 200ms (rode stippellijn)? Dan is er sprake van een vertraagde geleiding (1e graads AV-blok).
+
+# Ligt de lijn onder de 120ms (oranje stippellijn)? Dan gaat de geleiding abnormaal snel.
+
+# Output: Tot slot print de code het gemiddelde PR-interval en de hartslag (BPM), zodat je direct een klinisch overzicht hebt van dit fragment.
 
 # Paneel 1: ECG met R- en P-markers
 ax1.plot(t_seg, ecg_seg_clean, label='Gecentreerd ECG', color='tab:blue', alpha=0.8, linewidth=1)
