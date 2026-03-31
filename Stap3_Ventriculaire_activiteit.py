@@ -37,9 +37,11 @@ def ecg_PT_both(ecg, fs):
     N = int(0.150 * fs)
     ecgmai = signal.lfilter(np.ones(N)/N, 1, squared)
     return ecgmai, squared, band_passed, deriv_filtered
+    return ecgmai, squared, band_passed, deriv_filtered
 #%%
 # --- EXECUTION ---
 # ecg_raw, fs, t_raw = read_ecg_both(path_both)
+ecgmai, squared, band_passed, deriv_filtered = ecg_PT_both(ecg, fs)
 ecgmai, squared, band_passed, deriv_filtered = ecg_PT_both(ecg, fs)
 
 # Peak detection (Ventriculaire activiteit)
@@ -73,6 +75,7 @@ ax1.set_ylabel("Amplitude (mV)")
 ax1.set_xlabel("Tijd (s)")
 
 
+
 # Paneel C: RR-interval over tijd (ZONDER de 6 uur gap)
 # We plotten hier tegen de index om de tijd-gap fysiek te verwijderen
 ax2.plot(x_axis, clean_rr, 'o-', markersize=2, linewidth=0.5, color='tab:blue')
@@ -94,6 +97,8 @@ plt.show()
 #%%
 # --- ANALYSE ---
 mean_hr = 60 / np.mean(clean_rr)
+print(f"Gemiddelde ventriculaire frequentie voor slicen en outlier verwijdering: {mean_hr:.1f} BPM")
+print(f"Aantal gedetecteerde ventriculaire activaties voor slicen en outlier verwijdering: {len(locs)}")
 print(f"Gemiddelde ventriculaire frequentie voor slicen en outlier verwijdering: {mean_hr:.1f} BPM")
 print(f"Aantal gedetecteerde ventriculaire activaties voor slicen en outlier verwijdering: {len(locs)}")
 # %%
@@ -124,7 +129,14 @@ if found_start_idx is not None:
     
     # --- NIEUW: Verschuif de start met 2 seconden om het initiële artefact over te slaan ---
     zoom_start = found_start_idx + int(2 * fs) 
+    
+    # --- NIEUW: Verschuif de start met 2 seconden om het initiële artefact over te slaan ---
+    zoom_start = found_start_idx + int(2 * fs) 
     zoom_end = zoom_start + int(window_size * fs)
+
+    # Slice de data
+    ecg_segment = ecg[zoom_start:zoom_end]
+    t_segment = t[zoom_start:zoom_end]
 
     # Slice de data
     ecg_segment = ecg[zoom_start:zoom_end]
@@ -145,6 +157,8 @@ if found_start_idx is not None:
     # --- PLOTTEN ---
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
+    # Paneel A: ECG met sterretjes op de R-toppen
+  # Paneel A: ECG met sterretjes op de R-toppen
     # Paneel A: ECG met sterretjes op de R-toppen
   # Paneel A: ECG met sterretjes op de R-toppen
     ax1.plot(np.linspace(0, window_size, len(ecg_segment)), ecg_segment, color='tab:blue')
@@ -189,7 +203,6 @@ if found_start_idx is not None:
     plt.show()
 else:
     print("Geen segment van 10 seconden zonder gaten gevonden.")
-
 # %%
 # --- STATISTIEKEN VAN HET SEGMENT ---
 gemiddelde_hr_segment = 60 / np.mean(segment_rr)
@@ -318,3 +331,4 @@ print(f"Totaal aantal bruikbare slagen: {len(betrouwbare_rr) + 1}")
 print(f"Gemiddelde hartslag over de hele meting: {gemiddelde_hr_totaal:.1f} BPM")
 print("="*40 + "\n")
 # %%
+
