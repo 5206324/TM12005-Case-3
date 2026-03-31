@@ -84,6 +84,13 @@ ax[4].set_xlim(t_plot[0], t_plot[-1])
 plt.tight_layout()
 plt.show()
 
+# Opslaan
+np.save("r_toppen_indices.npy", locs)
+np.save("r_toppen_tijden.npy", t[locs])
+
+# In een ander script weer inladen:
+# locs_geladen = np.load("r_toppen_indices.npy")
+
 #%% --- Analyse van Ventriculaire Activiteit en Frequentie ---
 
 # 1. Gat in meting vinden en verwijderen
