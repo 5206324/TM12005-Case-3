@@ -9,11 +9,14 @@ import datetime
 import matplotlib.dates as mdates
 import pandas as pd
 from read_telemetry_ecg import ecg_PT, t, fs,ecg, locs
+from Stap3_Ventriculaire_activiteit import ecg_PT_both
 
-
+#%%
 # --- 1. Voorbereiding & Schoonmaken ---
 # We begrenzen extreme uitschieters (clipping) om de grafiek leesbaar te houden.
 # Alles boven 5x de mediaan van de pieken wordt als ruis/uitschieter beschouwd.
+ecgmai, squared, band_passed, deriv_filtered= ecg_PT_both(ecg, fs)
+
 limit = np.median(ecgmai[locs]) * 10
 ecgmai_clean = np.clip(ecgmai, 0, limit)
 
