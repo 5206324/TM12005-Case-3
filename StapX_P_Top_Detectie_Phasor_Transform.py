@@ -131,8 +131,8 @@ print(f"Aantal potentiële PACs gedetecteerd: {len(pac_indices)}")
 #%% 
 # --- 4. SEGMENT SELECTIE & DETAIL FILTERING ---
 # We nemen een segment van 12 seconden vanaf seconde 150 voor de detailplots.
-zoom_start_sec = 150
-zoom_end_sec = 162
+zoom_start_sec = 2000
+zoom_end_sec = 2030
 start_samp = int(zoom_start_sec * fs)
 end_samp = int(zoom_end_sec * fs)
 
@@ -201,6 +201,10 @@ ax1.scatter(r_x_seg_filtered, r_y_seg, color='red', marker='*', s=150, label='R-
 ax1.scatter(p_x_seg, p_y_seg, color='green', marker='o', s=80, label='P-top', zorder=5)
 ax1.set_title(f"Detail: ECG Analyse (Seconde {zoom_start_sec} - {zoom_end_sec})")
 ax1.set_ylim(np.percentile(ecg_seg_clean, 1)*2.5, np.percentile(ecg_seg_clean, 99)*2.5)
+ax1.set_xlabel("Tijd (s)"); ax1.set_ylabel("Amplitude (mV)")
+ax1.axhline(25, color='red', linestyle='--', alpha=0.5, label='normale P-top amplitude')
+ax1.axhline(0, color='black', linestyle='-', alpha=0.5, label= '0 mV')
+ax1.axhline(-25, color='red', linestyle='--', alpha=0.5, label='normale P-top amplitude')
 ax1.legend(loc='upper right'); ax1.grid(True, alpha=0.3)
 
 # Paneel 2: PR-interval Detail Trend
@@ -251,4 +255,77 @@ if gemiddelde_pr > 200:
 else:
     print("Interpretatie: Het gemiddelde PR-interval valt binnen de normale grenzen (120-200ms).")
 
+# %%
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- 1. FILTERING EN TIJDSVERSCHUIVING ---
+# Definieer het gat (ongeveer tussen 17.500 en 39.500 seconden)
+mask = ~((np.array(r_x_all) > 17500) & (np.array(r_x_all) < 39500))
+
+t_filt = np.array(r_x_all)[mask]
+duur_filt = np.array(p_duur_all)[mask]
+pol_filt = np.array(p_polariteit)[mask]
+pr_filt = np.array(pr_ms_all)[mask]
+
+# Verschuif de tijd om het gat fysiek te sluiten
+gap_offset = 39500 - 17500
+t_shifted = np.array([t - gap_offset if t > 39500 else t for t in t_filt])
+
+# --- 2. BEREKENINGEN (P-P en Trends) ---
+# Bereken absolute P-top tijden: P_tijd = R_tijd - (PR_interval / 1000)
+p_times = t_shifted - (pr_filt / 1000)
+pp_intervals = np.diff(p_times) * 1000  # in ms
+
+# Trends berekenen (rolling average over 50 slagen)
+def get_trend(data, window=50):
+    return np.convolve(data, np.ones(window)/window, mode='same')
+
+trend_pp = get_trend(pp_intervals)
+trend_duur = get_trend(duur_filt)
+
+# --- 3. PLOTTEN (Subplots) ---
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
+
+# Kleuren-thema
+c_light = '#D1B9E1' # Lichtpaars
+c_dark = '#9400D3'  # Donkerpaars
+
+# --- Plot 1: P-P Interval ---
+ax1.plot(p_times[1:], pp_intervals, color=c_light, linewidth=0.5, alpha=0.5, label='P-P (per slag)')
+ax1.fill_between(p_times[1:], 0, pp_intervals, color=c_light, alpha=0.3)
+ax1.plot(p_times[1:], trend_pp, color=c_dark, linewidth=2, label='Trend (50 slagen)')
+ax1.set_ylabel('P-P Interval (ms)')
+ax1.set_ylim(400, 1500) # Fysiologisch bereik voor betere details
+ax1.set_title('Atriale Analyse: Ritmiek en Morfologie')
+ax1.legend(loc='upper right')
+
+# --- Plot 2: P-duur (Precies zoals je voorbeeld) ---
+ax2.plot(t_shifted, duur_filt, color=c_light, linewidth=0.5, alpha=0.5, label='P-duur (per slag)')
+ax2.fill_between(t_shifted, 40, duur_filt, color=c_light, alpha=0.3)
+ax2.plot(t_shifted, trend_duur, color=c_dark, linewidth=2, label='Trend (50 slagen)')
+ax2.axhline(y=120, color='red', linestyle='--', linewidth=1, label='120ms')
+ax2.axhline(y=80, color='blue', linestyle='--', linewidth=1, label='80ms')
+ax2.set_ylabel('P-duur (ms)')
+ax2.set_ylim(40, 180)
+ax2.legend(loc='upper right')
+
+# --- Plot 3: P-polariteit ---
+# Scatter plot met kleurcodering voor polariteit
+fig = plt.figure(figsize=(15, 4))
+colors = ['#E74C3C' if p == -1 else '#3498DB' for p in pol_filt]
+plt.scatter(t_shifted, pol_filt, c=colors, s=15, alpha=0.6)
+# plt.set_yticks([1, -1])
+plt.xlim(20000, 20050)
+plt.yticks([1, -1], ['Positief (+)', 'Negatief (-)'])
+plt.ylabel('Polariteit')
+plt.xlabel('Gecorrigeerde Tijd (s)')
+plt.ylim(-1.5, 1.5)
+
+# Algemene styling
+for ax in [ax1, ax2, ax3]:
+    ax.grid(True, linestyle='-', alpha=0.2)
+
+plt.tight_layout()
+plt.show()
 # %%
