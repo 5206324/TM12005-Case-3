@@ -284,12 +284,80 @@ def get_trend(data, window=50):
 trend_pp = get_trend(pp_intervals)
 trend_duur = get_trend(duur_filt)
 
+# --- 4. RITME CLASSIFICATIE ---
+def classify_rhythm(pp_values, window_size=10):
+    n = len(pp_values)
+    labels = np.zeros(n, dtype=int) # 0 = Sinus, 1 = PAC, 2 = AF
+    
+    # Bereken lokale statistieken voor AF detectie
+    # We gebruiken een verschuivend venster om de variabiliteit te bepalen
+    for i in range(window_size, n):
+        local_pp = pp_values[i-window_size:i]
+        cv = np.std(local_pp) / np.mean(local_pp)
+        
+        # 1. Check voor AF (hoge variabiliteit over langere tijd)
+        if cv > 0.20: # Drempelwaarde voor AF (15% variatie)
+            labels[i] = 2
+        
+        # 2. Check voor PAC (individuele slag is prematuur)
+        # Vergelijking met het gemiddelde van de vorige 5 slagen
+        local_avg = np.mean(pp_values[i-5:i])
+        if pp_values[i] < 0.80 * local_avg: # 30% vroeger dan gemiddeld
+            labels[i] = 1
+            
+    return labels
+
+# --- 1. RMSSD BEREKENING ---
+def get_rhythm_classification(pp_intervals, window=20):
+    # 1. Bereken opeenvolgende verschillen (successive differences)
+    diffs = np.diff(pp_intervals)
+    
+    # 2. Rollende RMSSD berekening
+    # We gebruiken een squared diff en dan een convolution voor het gemiddelde
+    squared_diffs = diffs**2
+    rolling_ms = np.convolve(squared_diffs, np.ones(window)/window, mode='same')
+    rmssd = np.sqrt(rolling_ms)
+    
+    # 3. Classificatie logica
+    labels = []
+    for i in range(len(rmssd)):
+        val = rmssd[i]
+        curr_pp = pp_intervals[i]
+        
+        # Gemiddelde van de omgeving voor prematuriteit-check
+        start = max(0, i-5)
+        local_avg = np.mean(pp_intervals[start:i]) if i > 0 else curr_pp
+        
+        if val > 150: 
+            # Continu hoge variabiliteit wijst op AF
+            labels.append("AF")
+        elif curr_pp < 0.75 * local_avg:
+            # Een plotselinge korte slag wijst op een PAC
+            labels.append("PAC")
+        else:
+            # Stabiel ritme
+            labels.append("Sinus")
+            
+    return rmssd, labels
+
+# Uitvoeren op jouw data
+rmssd_values, rhythm_labels = get_rhythm_classification(pp_intervals)
+
+# Voer classificatie uit
+ritme_labels = classify_rhythm(pp_intervals)
+
+# Mapping voor visualisatie
+# Sinus = Groen, PAC = Oranje/Geel, AF = Rood
+colors_ritme = np.array(['#2ECC71', '#F1C40F', '#E74C3C'])
+current_colors = colors_ritme[ritme_labels]
 # --- 3. PLOTTEN (Subplots) ---
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), sharex=True)
+#%%
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 18), sharex=True)
 
 # Kleuren-thema
 c_light = '#D1B9E1' # Lichtpaars
 c_dark = '#9400D3'  # Donkerpaars
+
 
 # --- Plot 1: P-P Interval ---
 ax1.plot(p_times[1:], pp_intervals, color=c_light, linewidth=0.5, alpha=0.5, label='P-P (per slag)')
@@ -299,16 +367,80 @@ ax1.set_ylabel('P-P Interval (ms)')
 ax1.set_ylim(400, 1500) # Fysiologisch bereik voor betere details
 ax1.set_title('Atriale Analyse: Ritmiek en Morfologie')
 ax1.legend(loc='upper right')
+# --- Update Plot 1 (P-P Interval met Classificatie) ---
+# ax2.plot(p_times[1:], pp_intervals, color=c_light, linewidth=0.5, alpha=0.5)
+
+# # Voeg scatterpunten toe voor de classificatie
+# ax2.scatter(p_times[1:], pp_intervals, c=current_colors, s=20, zorder=3, label='Gedetecteerd Ritme')
+
+# # Legenda handmatig verduidelijken
+# from matplotlib.lines import Line2D
+# legend_elements = [
+#     Line2D([0], [0], color='#2ECC71', marker='o', linestyle='None', label='Sinus'),
+#     Line2D([0], [0], color='#F1C40F', marker='o', linestyle='None', label='PAC'),
+#     Line2D([0], [0], color='#E74C3C', marker='o', linestyle='None', label='AF/Onregelmatig'),
+#     Line2D([0], [0], color=c_dark, label='Trend')
+# ]
+# ax2.legend(handles=legend_elements, loc='upper right')
+
+# Voeg een extra subplot toe voor RMSSD
+# fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 15), sharex=True)
+
+# ... (jouw bestaande ax1 en ax2 code) ...
+# --- Stap 1: Definieer de drempelwaarden ---
+af_threshold = 130    # RMSSD boven 130ms = waarschijnlijk AF
+pac_threshold = 0.85  # P-P interval < 85% van gemiddelde = PAC
+
+# --- Stap 2: Loop door de data en bepaal de kleur per segment ---
+# We maken 'zones' voor de achtergrond
+zones = [] 
+
+for i in range(1, len(p_times)-1):
+    curr_pp = pp_intervals[i-1]
+    curr_rmssd = rmssd_values[i-1]
+    
+    # Bepaal kleur
+    if curr_rmssd > af_threshold:
+        color = 'red'      # AF
+        label = 'AF'
+    elif curr_pp < pac_threshold * np.mean(pp_intervals[max(0, i-10):i]):
+        color = 'orange'   # PAC
+        label = 'PAC'
+    else:
+        color = 'green'    # Sinus
+        label = 'Sinus'
+    
+    zones.append((p_times[i], p_times[i+1], color))
+
+ax2.plot(p_times[2:], rmssd_values, color='purple', linewidth=1)
+ax2.set_ylim(0, 300)  # Beperk de as tot fysiologische waarden (0-300ms)
+ax2.axhline(y=100, color='red', linestyle='--', label='AF grens')
+ax2.set_ylabel('RMSSD (ms)')
+ax2.set_title('Variabiliteit Analyse (RMSSD)')# --- Stap 3: Teken de zones in de plot (ax2) ---
+for start, end, kol in zones:
+    ax2.axvspan(start, end, color=kol, alpha=0.1, lw=0)
+
+# Handmatige legenda voor de kleuren
+from matplotlib.lines import Line2D
+custom_lines = [Line2D([0], [0], color='green', alpha=1, lw=4),
+                Line2D([0], [0], color='orange', alpha=1, lw=4),
+                Line2D([0], [0], color='red', alpha=0.3, lw=4)]
+ax2.legend(custom_lines, ['Sinus', 'PAC', 'AF'], loc='upper right')
+# Plot RMSSD op ax3
+# In je plot sectie voor RMSSD:
+
+
+
 
 # --- Plot 2: P-duur (Precies zoals je voorbeeld) ---
-ax2.plot(t_shifted, duur_filt, color=c_light, linewidth=0.5, alpha=0.5, label='P-duur (per slag)')
-ax2.fill_between(t_shifted, 40, duur_filt, color=c_light, alpha=0.3)
-ax2.plot(t_shifted, trend_duur, color=c_dark, linewidth=2, label='Trend (50 slagen)')
-ax2.axhline(y=120, color='red', linestyle='--', linewidth=1, label='120ms')
-ax2.axhline(y=80, color='blue', linestyle='--', linewidth=1, label='80ms')
-ax2.set_ylabel('P-duur (ms)')
-ax2.set_ylim(40, 180)
-ax2.legend(loc='upper right')
+ax3.plot(t_shifted, duur_filt, color=c_light, linewidth=0.5, alpha=0.9, label='P-duur (per slag)')
+ax3.fill_between(t_shifted, 40, duur_filt, color=c_light, alpha=0.3)
+ax3.plot(t_shifted, trend_duur, color=c_dark, linewidth=2, label='Trend (50 slagen)')
+ax3.axhline(y=120, color='red', linestyle='--', linewidth=1, label='120ms')
+ax3.axhline(y=80, color='blue', linestyle='--', linewidth=1, label='80ms')
+ax3.set_ylabel('P-duur (ms)')
+ax3.set_ylim(40, 180)
+ax3.legend(loc='upper right')
 
 # --- Plot 3: P-polariteit ---
 # Scatter plot met kleurcodering voor polariteit
